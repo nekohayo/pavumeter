@@ -40,6 +40,7 @@ protected:
     virtual bool on_delete_event(GdkEventAny* e);
     virtual bool on_display_timeout();
     virtual bool on_calc_timeout();
+    virtual void decayLevels();
 
     sigc::connection display_timeout_signal_connection;
     sigc::connection calc_timeout_signal_connection;
@@ -205,9 +206,34 @@ void MainWindow::showLevels(const LevelInfo &i) {
 
 }
 
+#define DECAY_LEVEL (0.005)
+
+void MainWindow::decayLevels() {
+    unsigned nchan = channels.size();
+
+    for (unsigned n = 0; n < nchan; n++) {
+        double level;
+
+        ChannelInfo *c = channels[n];
+
+        level = c->progress->get_fraction();
+
+        if (level <= 0)
+            continue;
+
+        level = level > DECAY_LEVEL ? level - DECAY_LEVEL : 0;
+        c->progress->set_fraction(level);
+    }
+}
+
 bool MainWindow::on_display_timeout() {
     LevelInfo *i = NULL;
 
+    if (levelQueue.empty()) {
+        decayLevels();
+        return true;
+    }
+    
     while (levelQueue.size() > 0) {
         if (i)
             delete i;
