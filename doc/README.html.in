@@ -72,7 +72,7 @@ line. If ommited the daemon's default source is selected.</p>
 distributions (and maybe Unix versions) since it uses GNU autoconf for
 source code configuration.</p>
 
-<p><tt>pavumeter</tt> requires <a href="http://gtkmm.sf.net/"><tt>gtkmm</tt> installed.</p>
+<p><tt>pavumeter</tt> requires <a href="http://gtkmm.sf.net/"><tt>gtkmm</tt></a> installed.</p>
 
 <p>Obviously <tt>pavumeter</tt> requires an installation of <tt>polypaudio</tt> (version 0.4).</p>
  
