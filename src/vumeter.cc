@@ -279,8 +279,9 @@ static struct pa_stream *stream = NULL;
 static struct pa_sample_spec sample_spec = { (enum pa_sample_format) 0, 0, 0 };    
 static char* source_name = NULL;
 
-static void stream_get_latency_callback(struct pa_stream *, const struct pa_latency_info *l, void *) {
+static void stream_get_latency_info_callback(struct pa_stream *s, const struct pa_latency_info *l, void *) {
     pa_usec_t t;
+    int negative = 0;
     
     if (!l) {
         g_message("Failed to get latency information: %s", pa_strerror(pa_context_errno(context)));
@@ -290,17 +291,17 @@ static void stream_get_latency_callback(struct pa_stream *, const struct pa_late
 
     if (!mainWindow)
         return;
-    
-    t = l->source_usec + l->buffer_usec + l->transport_usec;
 
-    mainWindow->updateLatency(l->sink_usec > t ? l->sink_usec - t : 0);
+    t = pa_stream_get_latency(s, l, &negative);
+
+    mainWindow->updateLatency(negative ? 0 : t);
 }
 
 static gboolean latency_func(gpointer) {
     if (!stream)
         return false;
 
-    pa_operation_unref(pa_stream_get_latency(stream, stream_get_latency_callback, NULL));
+    pa_operation_unref(pa_stream_get_latency_info(stream, stream_get_latency_info_callback, NULL));
     return true;
 }
 
@@ -321,7 +322,7 @@ static void stream_state_callback(struct pa_stream *s, void *) {
             mainWindow = new MainWindow(sample_spec.channels, source_name);
 
             g_timeout_add(100, latency_func, NULL);
-            pa_operation_unref(pa_stream_get_latency(stream, stream_get_latency_callback, NULL));
+            pa_operation_unref(pa_stream_get_latency_info(stream, stream_get_latency_info_callback, NULL));
             break;
             
         case PA_STREAM_FAILED:
