@@ -33,7 +33,7 @@ homepage: all dist
 	mkdir -p $$HOME/homepage/private/projects/pavumeter
 	cp *.tar.gz $$HOME/homepage/private/projects/pavumeter
 	cp doc/README.html doc/screenshot.png doc/style.css $$HOME/homepage/private/projects/pavumeter
-	cp $$HOME/homepage/private/projects/pavumeter/README.html $$HOME/homepage/private/projects/paman/index.html
+	cp $$HOME/homepage/private/projects/pavumeter/README.html $$HOME/homepage/private/projects/pavumeter/index.html
 
 distcleancheck:
 	@:
