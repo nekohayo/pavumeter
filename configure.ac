@@ -45,10 +45,10 @@ AC_SUBST(GUILIBS_LIBS)
 
 if test -d ../polypaudio ; then
    POLYP_CFLAGS='-I$(top_srcdir)/../polypaudio'
-   POLYP_LIBS='-L$(top_srcdir)/../polypaudio/polyp/.libs -lpolyp -lpolyp-mainloop-glib -lpolyp-mainloop-glib -lpolyp-error'
+   POLYP_LIBS='-L$(top_srcdir)/../polypaudio/polyp/.libs -lpolyp-0.5 -lpolyp-mainloop-0.5 -lpolyp-mainloop-glib-0.5 -lpolyp-error-0.5'
    echo "*** Found polypaudio in ../polypaudio, using that version ***"
 else
-   PKG_CHECK_MODULES(POLYP, [ polyplib >= 0.4 polyplib-glib-mainloop >= 0.4 ])
+   PKG_CHECK_MODULES(POLYP, [ polyplib >= 0.5 polyplib-glib-mainloop >= 0.5 ])
 fi
 
 AC_SUBST(POLYP_LIBS)
@@ -57,6 +57,7 @@ AC_SUBST(POLYP_CFLAGS)
 # If using GCC specifiy some additional parameters
 if test "x$GCC" = "xyes" ; then
    CFLAGS="$CFLAGS -pipe -Wall -W -Wno-unused-parameter"
+   CXXFLAGS="$CXXFLAGS -pipe -Wall -W"
 fi
 
 # LYNX documentation generation
