@@ -354,7 +354,7 @@ static void context_get_source_info_callback(struct pa_context *c, const struct 
     stream = pa_stream_new(c, "vumeter", &sample_spec);
     pa_stream_set_state_callback(stream, stream_state_callback, NULL);
     pa_stream_set_read_callback(stream, stream_read_callback, NULL);
-    pa_stream_connect_record(stream, source_name, NULL);
+    pa_stream_connect_record(stream, source_name, NULL, (enum pa_stream_flags) 0);
 }
 
 static void context_get_server_info_callback(struct pa_context *c, const struct pa_server_info*si, void *) {

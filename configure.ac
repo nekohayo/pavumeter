@@ -45,10 +45,10 @@ AC_SUBST(GUILIBS_LIBS)
 
 if test -d ../polypaudio ; then
    POLYP_CFLAGS='-I$(top_srcdir)/../polypaudio'
-   POLYP_LIBS='-L$(top_srcdir)/../polypaudio/polyp/.libs -lpolyp-0.5 -lpolyp-mainloop-0.5 -lpolyp-mainloop-glib-0.5 -lpolyp-error-0.5'
+   POLYP_LIBS='-L$(top_srcdir)/../polypaudio/polyp/.libs -lpolyp-0.6 -lpolyp-mainloop-0.6 -lpolyp-mainloop-glib-0.6 -lpolyp-error-0.6'
    echo "*** Found polypaudio in ../polypaudio, using that version ***"
 else
-   PKG_CHECK_MODULES(POLYP, [ polyplib >= 0.5 polyplib-glib-mainloop >= 0.5 ])
+   PKG_CHECK_MODULES(POLYP, [ polyplib >= 0.6 polyplib-glib-mainloop >= 0.6 ])
 fi
 
 AC_SUBST(POLYP_LIBS)
