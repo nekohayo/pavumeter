@@ -20,7 +20,7 @@
 # Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
 
 AC_PREREQ(2.57)
-AC_INIT([pavumeter],[0.4],[mzihzrgre (at) 0pointer (dot) de])
+AC_INIT([pavumeter],[0.5],[mzihzrgre (at) 0pointer (dot) de])
 AC_CONFIG_SRCDIR([src/vumeter.cc])
 AC_CONFIG_HEADERS([config.h])
 AM_INIT_AUTOMAKE([foreign -Wall])
@@ -45,10 +45,10 @@ AC_SUBST(GUILIBS_LIBS)
 
 if test -d ../polypaudio ; then
    POLYP_CFLAGS='-I$(top_srcdir)/../polypaudio'
-   POLYP_LIBS='-L$(top_srcdir)/../polypaudio/polyp/.libs -lpolyp-0.7 -lpolyp-mainloop-0.7 -lpolyp-mainloop-glib-0.7 -lpolyp-error-0.7'
+   POLYP_LIBS='-L$(top_srcdir)/../polypaudio/polyp/.libs -lpolyp-0.8 -lpolyp-mainloop-0.8 -lpolyp-mainloop-glib-0.8 -lpolyp-error-0.8'
    echo "*** Found polypaudio in ../polypaudio, using that version ***"
 else
-   PKG_CHECK_MODULES(POLYP, [ polyplib >= 0.7 polyplib-glib-mainloop >= 0.7 ])
+   PKG_CHECK_MODULES(POLYP, [ polyplib >= 0.8 polyplib-glib-mainloop >= 0.8 ])
 fi
 
 AC_SUBST(POLYP_LIBS)

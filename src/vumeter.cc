@@ -37,7 +37,7 @@ protected:
     float *levels;
 
     virtual void addChannel(const Glib::ustring &l);
-    virtual bool on_delete_event(GdkEventAny* e);
+     virtual bool on_delete_event(GdkEventAny* e);
     virtual bool on_display_timeout();
     virtual bool on_calc_timeout();
     virtual void decayLevels();
@@ -145,7 +145,7 @@ MainWindow::~MainWindow() {
 
 bool MainWindow::on_delete_event(GdkEventAny*) {
     Gtk::Main::quit();
-    return false;
+    return true;
 }
 
 void MainWindow::addChannel(const Glib::ustring &l) {
