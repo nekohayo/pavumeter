@@ -31,18 +31,35 @@ protected:
 
     virtual void addChannel(const Glib::ustring &l);
     virtual bool on_delete_event(GdkEventAny* e);
-    virtual bool on_timeout();
+    virtual bool on_display_timeout();
+    virtual bool on_calc_timeout();
 
-    sigc::connection timeout_signal_connection;
+    sigc::connection display_timeout_signal_connection;
+    sigc::connection calc_timeout_signal_connection;
+    pa_usec_t latency;
+
+    class LevelInfo {
+    public:
+        LevelInfo(float *levels, pa_usec_t l);
+        virtual ~LevelInfo();
+        bool elapsed();
+
+        struct timeval tv;
+        float *levels;
+    };
+
+    std::deque<LevelInfo *> levelQueue;
 
 public:
     virtual void pushData(const float *d, size_t l);
-    virtual void showLevels();
+    virtual void showLevels(const LevelInfo& i);
+    virtual void updateLatency(pa_usec_t l);
 };
 
 MainWindow::MainWindow(unsigned nchan) :
     Gtk::Window(),
-    table(1, 2) {
+    table(1, 2),
+    latency(0) {
 
     g_assert(nchan > 0);
     
@@ -67,11 +84,9 @@ MainWindow::MainWindow(unsigned nchan) :
 
     g_assert(channels.size() == nchan);
 
-    levels = new float[nchan];
-    for (unsigned c = 0; c < nchan; c++)
-        levels[c] = 0;
-    
-    timeout_signal_connection = Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::on_timeout), 50);
+    levels = NULL;
+    display_timeout_signal_connection = Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::on_display_timeout), 10);
+    calc_timeout_signal_connection = Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::on_calc_timeout), 50);
     
     show_all();
 }
@@ -83,8 +98,17 @@ MainWindow::~MainWindow() {
         delete i;
     }
 
-    delete[] levels;
-    timeout_signal_connection.disconnect();
+    while (levelQueue.size() > 0) {
+        LevelInfo *i = levelQueue.back();
+        levelQueue.pop_back();
+        delete i;
+    }
+    
+    if (levels)
+        delete[] levels;
+    
+    display_timeout_signal_connection.disconnect();
+    calc_timeout_signal_connection.disconnect();
 }
 
 bool MainWindow::on_delete_event(GdkEventAny*) {
@@ -101,18 +125,21 @@ MainWindow::ChannelInfo::ChannelInfo(MainWindow &w, const Glib::ustring &l) {
     label->set_markup(l);
 
     progress = Gtk::manage(new Gtk::ProgressBar());
-    progress->set_fraction(0.5);
+    progress->set_fraction(0);
     
     w.table.resize(w.channels.size()+1, 2);
     w.table.attach(*label, 0, 1, w.channels.size(), w.channels.size()+1, Gtk::FILL, (Gtk::AttachOptions) 0);
     w.table.attach(*progress, 1, 2, w.channels.size(), w.channels.size()+1, Gtk::EXPAND|Gtk::FILL, (Gtk::AttachOptions) 0);
 }
 
-
 void MainWindow::pushData(const float *d, unsigned samples) {
     unsigned nchan = channels.size();
 
-    g_assert(levels);
+    if (!levels) {
+        levels = new float[nchan];
+        for (unsigned c = 0; c < nchan; c++)
+            levels[c] = 0;
+    }
     
     while (samples >= nchan) {
 
@@ -127,31 +154,114 @@ void MainWindow::pushData(const float *d, unsigned samples) {
     }
 }
 
-void MainWindow::showLevels() {
+void MainWindow::showLevels(const LevelInfo &i) {
     unsigned nchan = channels.size();
 
-    g_assert(levels);
+    g_assert(i.levels);
     
-    for (unsigned c = 0; c < nchan; c++) {
-        ChannelInfo *i = channels[c];
-        i->progress->set_fraction(levels[c]);
+    for (unsigned n = 0; n < nchan; n++) {
+        ChannelInfo *c = channels[n];
+        c->progress->set_fraction(i.levels[n]);
     }
 
-    for (unsigned c = 0; c < nchan; c++)
-        levels[c] = 0;
 }
 
+bool MainWindow::on_display_timeout() {
+    LevelInfo *i = NULL;
 
-bool MainWindow::on_timeout() {
-    showLevels();
+    while (levelQueue.size() > 0) {
+        if (i)
+            delete i;
+        
+        i = levelQueue.back();
+        levelQueue.pop_back();
+
+        if (!i->elapsed())
+            break;
+    }
+
+    if (i) {
+        showLevels(*i);
+        delete i;
+    }
+    
     return true;
+}
+
+bool MainWindow::on_calc_timeout() {
+    if (levels) {
+        levelQueue.push_front(new LevelInfo(levels, latency));
+        levels = NULL;
+    }
+
+    return true;
+}
+
+void MainWindow::updateLatency(pa_usec_t l) {
+    latency = l;
+}
+
+static void timeval_add_usec(struct timeval *tv, pa_usec_t v) {
+    uint32_t sec = v/1000000;
+    tv->tv_sec += sec;
+    v -= sec*1000000;
+    
+    tv->tv_usec += v;
+
+    while (tv->tv_usec >= 1000000) {
+        tv->tv_sec++;
+        tv->tv_usec -= 1000000;
+    }
+}
+
+MainWindow::LevelInfo::LevelInfo(float *l, pa_usec_t latency) {
+    levels = l;
+    gettimeofday(&tv, NULL);
+    timeval_add_usec(&tv, latency);
+}
+
+MainWindow::LevelInfo::~LevelInfo() {
+    delete[] levels;
+}
+
+bool MainWindow::LevelInfo::elapsed() {
+    struct timeval now;
+    gettimeofday(&now, NULL);
+
+    if (now.tv_sec != tv.tv_sec)
+        return now.tv_sec > tv.tv_sec;
+
+    return now.tv_usec >= tv.tv_usec;
 }
 
 static MainWindow *mainWindow = NULL;
 static struct pa_context *context = NULL;
 static struct pa_stream *stream = NULL;
 static struct pa_sample_spec sample_spec = { (enum pa_sample_format) 0, 0, 0 };    
-static char* sink_name = NULL;
+static char* source_name = NULL;
+static uint32_t sink_index = PA_INVALID_INDEX;
+
+static void context_get_sink_info_callback(struct pa_context *c, const struct pa_sink_info *si, int is_last, void *) {
+    if (is_last < 0) {
+        g_message("Failed to get latency information: %s", pa_strerror(pa_context_errno(c)));
+        Gtk::Main::quit();
+        return;
+    }
+
+    if (!si)
+        return;
+
+    if (mainWindow)
+        mainWindow->updateLatency(si->latency);
+}
+
+static gboolean latency_func(gpointer) {
+    if (!stream)
+        return false;
+
+    pa_operation_unref(pa_context_get_sink_info_by_index(context, sink_index, context_get_sink_info_callback, NULL));
+    return true;
+}
 
 static void stream_read_callback(struct pa_stream *, const void *p, size_t l, void *) {
     g_assert(mainWindow);
@@ -178,21 +288,27 @@ static void stream_state_callback(struct pa_stream *s, void *) {
     }
 }
 
-static void context_get_sink_info_callback(struct pa_context *c, const struct pa_sink_info *si, int is_last, void *) {
+static void context_get_source_info_callback(struct pa_context *c, const struct pa_source_info *si, int is_last, void *) {
     char t[256];
-    
-    if (is_last)
-        return;
-    
-    if (!si) {
-        g_message("Failed to get sink information: %s", pa_strerror(pa_context_errno(context)));
+
+    if (is_last < 0) {
+        g_message("Failed to get source information: %s", pa_strerror(pa_context_errno(context)));
         Gtk::Main::quit();
         return;
     }
 
+    if (!si)
+        return;
+
     sample_spec.format = PA_SAMPLE_FLOAT32;
     sample_spec.rate = si->sample_spec.rate;
     sample_spec.channels = si->sample_spec.channels;
+
+    if (si->monitor_of_sink != PA_INVALID_INDEX) {
+        g_timeout_add(100, latency_func, NULL);
+        sink_index = si->monitor_of_sink;
+        pa_operation_unref(pa_context_get_sink_info_by_index(context, sink_index, context_get_sink_info_callback, NULL));
+    }
 
     pa_sample_spec_snprint(t, sizeof(t), &sample_spec);
     g_message("Using sample format: %s", t);
@@ -200,7 +316,7 @@ static void context_get_sink_info_callback(struct pa_context *c, const struct pa
     stream = pa_stream_new(c, "vumeter", &sample_spec);
     pa_stream_set_state_callback(stream, stream_state_callback, NULL);
     pa_stream_set_read_callback(stream, stream_read_callback, NULL);
-    pa_stream_connect_record(stream, NULL, NULL);
+    pa_stream_connect_record(stream, source_name, NULL);
 }
 
 static void context_get_server_info_callback(struct pa_context *c, const struct pa_server_info*si, void *) {
@@ -210,8 +326,14 @@ static void context_get_server_info_callback(struct pa_context *c, const struct 
         return;
     }
 
-    sink_name = g_strdup(si->default_sink_name);
-    pa_operation_unref(pa_context_get_sink_info_by_name(c, sink_name, context_get_sink_info_callback, NULL));
+    if (!*si->default_source_name) {
+        g_message("No default source set.");
+        Gtk::Main::quit();
+        return;
+    }    
+    
+    source_name = g_strdup(si->default_source_name);
+    pa_operation_unref(pa_context_get_source_info_by_name(c, source_name, context_get_source_info_callback, NULL));
 }
 
 static void context_state_callback(struct pa_context *c, void *) {
@@ -225,8 +347,8 @@ static void context_state_callback(struct pa_context *c, void *) {
         case PA_CONTEXT_READY:
             g_assert(!stream);
 
-            if (sink_name)
-                pa_operation_unref(pa_context_get_sink_info_by_name(c, sink_name, context_get_sink_info_callback, NULL));
+            if (source_name)
+                pa_operation_unref(pa_context_get_source_info_by_name(c, source_name, context_get_source_info_callback, NULL));
             else
                 pa_operation_unref(pa_context_get_server_info(c, context_get_server_info_callback, NULL));
             
@@ -246,6 +368,9 @@ int main(int argc, char *argv[]) {
     signal(SIGPIPE, SIG_IGN);
 
     Gtk::Main kit(argc, argv);
+
+    if (argc > 1)
+        source_name = g_strdup(argv[1]);
 
     m = pa_glib_mainloop_new(g_main_context_default());
     g_assert(m);
