@@ -9,6 +9,8 @@
 #include <polyp/polyplib-introspect.h>
 #include <polyp/glib-mainloop.h>
 
+#define LOGARITHMIC 1
+
 class MainWindow : public Gtk::Window {
 
 public:
@@ -189,8 +191,16 @@ void MainWindow::showLevels(const LevelInfo &i) {
     g_assert(i.levels);
     
     for (unsigned n = 0; n < nchan; n++) {
+        double level;
         ChannelInfo *c = channels[n];
-        c->progress->set_fraction(i.levels[n]);
+
+        level = i.levels[n];
+
+#ifdef LOGARITHMIC            
+        level = log10(level*9+1);
+#endif
+        
+        c->progress->set_fraction(level > 1 ? 1 : level);
     }
 
 }
@@ -268,27 +278,29 @@ static struct pa_context *context = NULL;
 static struct pa_stream *stream = NULL;
 static struct pa_sample_spec sample_spec = { (enum pa_sample_format) 0, 0, 0 };    
 static char* source_name = NULL;
-static uint32_t sink_index = PA_INVALID_INDEX;
 
-static void context_get_sink_info_callback(struct pa_context *c, const struct pa_sink_info *si, int is_last, void *) {
-    if (is_last < 0) {
-        g_message("Failed to get latency information: %s", pa_strerror(pa_context_errno(c)));
+static void stream_get_latency_callback(struct pa_stream *, const struct pa_latency_info *l, void *) {
+    pa_usec_t t;
+    
+    if (!l) {
+        g_message("Failed to get latency information: %s", pa_strerror(pa_context_errno(context)));
         Gtk::Main::quit();
         return;
     }
 
-    if (!si)
+    if (!mainWindow)
         return;
+    
+    t = l->source_usec + l->buffer_usec + l->transport_usec;
 
-    if (mainWindow)
-        mainWindow->updateLatency(si->latency);
+    mainWindow->updateLatency(l->sink_usec > t ? l->sink_usec - t : 0);
 }
 
 static gboolean latency_func(gpointer) {
     if (!stream)
         return false;
 
-    pa_operation_unref(pa_context_get_sink_info_by_index(context, sink_index, context_get_sink_info_callback, NULL));
+    pa_operation_unref(pa_stream_get_latency(stream, stream_get_latency_callback, NULL));
     return true;
 }
 
@@ -307,6 +319,9 @@ static void stream_state_callback(struct pa_stream *s, void *) {
         case PA_STREAM_READY:
             g_assert(!mainWindow);
             mainWindow = new MainWindow(sample_spec.channels, source_name);
+
+            g_timeout_add(100, latency_func, NULL);
+            pa_operation_unref(pa_stream_get_latency(stream, stream_get_latency_callback, NULL));
             break;
             
         case PA_STREAM_FAILED:
@@ -332,12 +347,6 @@ static void context_get_source_info_callback(struct pa_context *c, const struct 
     sample_spec.format = PA_SAMPLE_FLOAT32;
     sample_spec.rate = si->sample_spec.rate;
     sample_spec.channels = si->sample_spec.channels;
-
-    if (si->monitor_of_sink != PA_INVALID_INDEX) {
-        g_timeout_add(100, latency_func, NULL);
-        sink_index = si->monitor_of_sink;
-        pa_operation_unref(pa_context_get_sink_info_by_index(context, sink_index, context_get_sink_info_callback, NULL));
-    }
 
     pa_sample_spec_snprint(t, sizeof(t), &sample_spec);
     g_message("Using sample format: %s", t);
@@ -408,7 +417,7 @@ int main(int argc, char *argv[]) {
     g_assert(m);
 
     pa_context_set_state_callback(context, context_state_callback, NULL);
-    pa_context_connect(context, NULL);
+    pa_context_connect(context, NULL, 1, NULL);
 
     Gtk::Main::run();
 
