@@ -31,7 +31,7 @@ README:
 homepage: all dist
 	test -d $$HOME/homepage/private
 	mkdir -p $$HOME/homepage/private/projects/pavumeter
-	cp *.tar.gz $$HOME/homepage/private/projects/pavumeter
+	cp pavumeter-@PACKAGE_VERSION@.tar.gz $$HOME/homepage/private/projects/pavumeter
 	cp doc/README.html doc/screenshot.png doc/style.css $$HOME/homepage/private/projects/pavumeter
 	cp $$HOME/homepage/private/projects/pavumeter/README.html $$HOME/homepage/private/projects/pavumeter/index.html
 
