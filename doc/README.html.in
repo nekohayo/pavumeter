@@ -42,6 +42,9 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.</p>
 
 <h2><a name="news">News</a></h2>
 
+<div class="news-date">Thu Oct 28 2004: </div> <p class="news-text"><a
+href="@PACKAGE_URL@pavumeter-0.3.tar.gz">Version 0.3</a> released; compatibility with polypaudio 0.6</p>
+
 <div class="news-date">Mon Sep 20 2004: </div> <p class="news-text"><a
 href="@PACKAGE_URL@pavumeter-0.2.tar.gz">Version 0.2</a> released; compatibility with polypaudio 0.5</p>
 
@@ -77,7 +80,7 @@ source code configuration.</p>
 
 <p><tt>pavumeter</tt> requires <a href="http://gtkmm.sf.net/"><tt>gtkmm</tt></a> installed.</p>
 
-<p>Obviously <tt>pavumeter</tt> requires an installation of <tt>polypaudio</tt> (version 0.5).</p>
+<p>Obviously <tt>pavumeter</tt> requires an installation of <tt>polypaudio</tt> (version 0.6).</p>
  
 <h2><a name="installation">Installation</a></h2>
 
@@ -97,12 +100,14 @@ compilation and <tt>make install</tt> (as root) for installation of
 
 <p>The current release is <a href="@PACKAGE_URL@pavumeter-@PACKAGE_VERSION@.tar.gz">@PACKAGE_VERSION@</a></p>
 
-<p>Get <tt>pavumeter</tt>'s development sources from the <a href="http://subversion.tigris.org/">Subversion</a> <a href="https://seth.intheinter.net:8081/svn/pavumeter/">repository</a>. (<a href="http://0pointer.de/cgi-bin/viewcvs.cgi/?root=pavumeter">viewcvs</a>)</p>
+<p>Get <tt>pavumeter</tt>'s development sources from the <a href="http://subversion.tigris.org/">Subversion</a> <a href="svn://seth.intheinter.net/pavumeter">repository</a> (<a href="http://0pointer.de/cgi-bin/viewcvs.cgi/?root=pavumeter">viewcvs</a>): </p>
+
+<pre>svn checkout svn://seth.intheinter.net/pavumeter/trunk pavumeter</pre>
 
 <p>If you want to be notified whenever I release a new version of this software use the subscription feature of <a href="http://freshmeat.net/projects/pavumeter/">Freshmeat</a>.</p>
 
 <hr/>
-<address class="grey">Lennart Poettering &lt;@PACKAGE_BUGREPORT@&gt;, September 2004</address>
+<address class="grey">Lennart Poettering &lt;@PACKAGE_BUGREPORT@&gt;, October 2004</address>
 <div class="grey"><i>$Id$</i></div>
 
 </body>
