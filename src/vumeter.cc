@@ -409,6 +409,14 @@ int main(int argc, char *argv[]) {
 
     if (argc > 1)
         source_name = g_strdup(argv[1]);
+    else {
+        char *e = getenv("POLYP_SOURCE");
+        if (e)
+            source_name = g_strdup(e);
+    }
+
+    if (source_name)
+        g_message("Using source '%s'", source_name);
 
     m = pa_glib_mainloop_new(g_main_context_default());
     g_assert(m);
@@ -429,6 +437,9 @@ int main(int argc, char *argv[]) {
     if (mainWindow)
         delete mainWindow;
 
+    if(source_name)
+        g_free(source_name);
+    
     pa_glib_mainloop_free(m);
     
     return 0;
