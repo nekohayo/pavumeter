@@ -12,7 +12,7 @@
 class MainWindow : public Gtk::Window {
 
 public:
-    MainWindow(unsigned chan);
+    MainWindow(unsigned chan, const char *source_name);
     virtual ~MainWindow();
     
 protected:
@@ -23,9 +23,14 @@ protected:
         Gtk::Label *label;
         Gtk::ProgressBar *progress;
     };
-    
+
+    Gtk::VBox vbox, titleVBox;
     Gtk::Table table;
     std::vector<ChannelInfo*> channels;
+    Gtk::Label titleLabel;
+    Gtk::Label subtitleLabel;
+    Gtk::HSeparator separator;
+    Gtk::EventBox eventBox;
 
     float *levels;
 
@@ -56,18 +61,42 @@ public:
     virtual void updateLatency(pa_usec_t l);
 };
 
-MainWindow::MainWindow(unsigned nchan) :
+MainWindow::MainWindow(unsigned nchan, const char *source_name) :
     Gtk::Window(),
     table(1, 2),
     latency(0) {
 
+    char t[256];
+
     g_assert(nchan > 0);
     
-    set_border_width(12);
     set_title("Volume Meter");
+
+    add(vbox);
+
+    Gdk::Color c("white");
+    eventBox.modify_bg(Gtk::STATE_NORMAL, c);
+
+    vbox.pack_start(eventBox, false, false);
+
+    eventBox.add(titleVBox);
+    titleVBox.add(titleLabel);
+    titleVBox.add(subtitleLabel);
+    titleVBox.set_border_width(12);
+    titleVBox.set_spacing(6);
+
+    titleLabel.set_markup("<span size=\"18000\" color=\"black\"><b>Polypaudio Volume Meter</b></span>");
+    titleLabel.set_alignment(0);
+    snprintf(t, sizeof(t), "Showing signal levels of source <b>%s</b>.", source_name);
+    subtitleLabel.set_markup(t);
+    subtitleLabel.set_alignment(0);
+    
+    vbox.pack_start(separator, false, false);
+
+    table.set_border_width(12);
     table.set_row_spacings(6);
     table.set_col_spacings(12);
-    add(table);
+    vbox.pack_start(table, true, true);
 
     if (nchan == 2) {
         addChannel("<b>Left:</b>");
@@ -277,7 +306,7 @@ static void stream_state_callback(struct pa_stream *s, void *) {
 
         case PA_STREAM_READY:
             g_assert(!mainWindow);
-            mainWindow = new MainWindow(sample_spec.channels);
+            mainWindow = new MainWindow(sample_spec.channels, source_name);
             break;
             
         case PA_STREAM_FAILED:
