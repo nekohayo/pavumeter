@@ -1,8 +1,12 @@
+/* $Id$ */
+
 #include <signal.h>
 
 #include <gtkmm.h>
 #include <polyp/polyplib-context.h>
 #include <polyp/polyplib-stream.h>
+#include <polyp/polyplib-error.h>
+#include <polyp/polyplib-introspect.h>
 #include <polyp/glib-mainloop.h>
 
 class MainWindow : public Gtk::Window {
@@ -23,10 +27,17 @@ protected:
     Gtk::Table table;
     std::vector<ChannelInfo*> channels;
 
+    float *levels;
+
     virtual void addChannel(const Glib::ustring &l);
+    virtual bool on_delete_event(GdkEventAny* e);
+    virtual bool on_timeout();
+
+    sigc::connection timeout_signal_connection;
 
 public:
     virtual void pushData(const float *d, size_t l);
+    virtual void showLevels();
 };
 
 MainWindow::MainWindow(unsigned nchan) :
@@ -55,6 +66,12 @@ MainWindow::MainWindow(unsigned nchan) :
     }
 
     g_assert(channels.size() == nchan);
+
+    levels = new float[nchan];
+    for (unsigned c = 0; c < nchan; c++)
+        levels[c] = 0;
+    
+    timeout_signal_connection = Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::on_timeout), 50);
     
     show_all();
 }
@@ -65,6 +82,14 @@ MainWindow::~MainWindow() {
         channels.pop_back();
         delete i;
     }
+
+    delete[] levels;
+    timeout_signal_connection.disconnect();
+}
+
+bool MainWindow::on_delete_event(GdkEventAny*) {
+    Gtk::Main::quit();
+    return false;
 }
 
 void MainWindow::addChannel(const Glib::ustring &l) {
@@ -83,47 +108,55 @@ MainWindow::ChannelInfo::ChannelInfo(MainWindow &w, const Glib::ustring &l) {
     w.table.attach(*progress, 1, 2, w.channels.size(), w.channels.size()+1, Gtk::EXPAND|Gtk::FILL, (Gtk::AttachOptions) 0);
 }
 
+
 void MainWindow::pushData(const float *d, unsigned samples) {
-    float *max;
     unsigned nchan = channels.size();
 
-    max = (float*) g_malloc(sizeof(float)*nchan);
-    g_assert(max);
-
-    for (unsigned c = 0; c < nchan; c++)
-        max[c] = 0;
+    g_assert(levels);
     
     while (samples >= nchan) {
 
         for (unsigned c = 0; c < nchan; c++) {
             float v = fabs(d[c]);
-            if (v > max[c])
-                max[c] = v;
+            if (v > levels[c])
+                levels[c] = v;
         }
 
         d += nchan;
         samples -= nchan;
     }
+}
 
+void MainWindow::showLevels() {
+    unsigned nchan = channels.size();
+
+    g_assert(levels);
+    
     for (unsigned c = 0; c < nchan; c++) {
         ChannelInfo *i = channels[c];
-        i->progress->set_fraction(max[c]);
+        i->progress->set_fraction(levels[c]);
     }
 
-    g_free(max);
+    for (unsigned c = 0; c < nchan; c++)
+        levels[c] = 0;
+}
+
+
+bool MainWindow::on_timeout() {
+    showLevels();
+    return true;
 }
 
 static MainWindow *mainWindow = NULL;
 static struct pa_context *context = NULL;
 static struct pa_stream *stream = NULL;
-static const struct pa_sample_spec sample_spec = {
-    PA_SAMPLE_FLOAT32, 44100, 2
-};    
+static struct pa_sample_spec sample_spec = { (enum pa_sample_format) 0, 0, 0 };    
+static char* sink_name = NULL;
 
 static void stream_read_callback(struct pa_stream *, const void *p, size_t l, void *) {
     g_assert(mainWindow);
 
-/*    mainWindow->pushData((const float*) p, l/sizeof(float));*/
+    mainWindow->pushData((const float*) p, l/sizeof(float));
 }
 
 static void stream_state_callback(struct pa_stream *s, void *) {
@@ -138,9 +171,47 @@ static void stream_state_callback(struct pa_stream *s, void *) {
             break;
             
         case PA_STREAM_FAILED:
+            g_message("Connection failed: %s", pa_strerror(pa_context_errno(context)));
+            
         case PA_STREAM_TERMINATED:
             Gtk::Main::quit();
     }
+}
+
+static void context_get_sink_info_callback(struct pa_context *c, const struct pa_sink_info *si, int is_last, void *) {
+    char t[256];
+    
+    if (is_last)
+        return;
+    
+    if (!si) {
+        g_message("Failed to get sink information: %s", pa_strerror(pa_context_errno(context)));
+        Gtk::Main::quit();
+        return;
+    }
+
+    sample_spec.format = PA_SAMPLE_FLOAT32;
+    sample_spec.rate = si->sample_spec.rate;
+    sample_spec.channels = si->sample_spec.channels;
+
+    pa_sample_spec_snprint(t, sizeof(t), &sample_spec);
+    g_message("Using sample format: %s", t);
+
+    stream = pa_stream_new(c, "vumeter", &sample_spec);
+    pa_stream_set_state_callback(stream, stream_state_callback, NULL);
+    pa_stream_set_read_callback(stream, stream_read_callback, NULL);
+    pa_stream_connect_record(stream, NULL, NULL);
+}
+
+static void context_get_server_info_callback(struct pa_context *c, const struct pa_server_info*si, void *) {
+    if (!si) {
+        g_message("Failed to get server information: %s", pa_strerror(pa_context_errno(context)));
+        Gtk::Main::quit();
+        return;
+    }
+
+    sink_name = g_strdup(si->default_sink_name);
+    pa_operation_unref(pa_context_get_sink_info_by_name(c, sink_name, context_get_sink_info_callback, NULL));
 }
 
 static void context_state_callback(struct pa_context *c, void *) {
@@ -153,14 +224,18 @@ static void context_state_callback(struct pa_context *c, void *) {
 
         case PA_CONTEXT_READY:
             g_assert(!stream);
-            stream = pa_stream_new(c, "vumeter", &sample_spec);
-            pa_stream_set_state_callback(stream, stream_state_callback, NULL);
-            pa_stream_set_read_callback(stream, stream_read_callback, NULL);
-            pa_stream_connect_record(stream, "input", NULL);
+
+            if (sink_name)
+                pa_operation_unref(pa_context_get_sink_info_by_name(c, sink_name, context_get_sink_info_callback, NULL));
+            else
+                pa_operation_unref(pa_context_get_server_info(c, context_get_server_info_callback, NULL));
+            
             break;
             
-        case PA_CONTEXT_TERMINATED:
         case PA_CONTEXT_FAILED:
+            g_message("Connection failed: %s", pa_strerror(pa_context_errno(context)));
+            
+        case PA_CONTEXT_TERMINATED:
             Gtk::Main::quit();
     }
 }
