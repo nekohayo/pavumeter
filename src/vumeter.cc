@@ -1,20 +1,37 @@
 /* $Id$ */
 
+/***
+  This file is part of pavumeter.
+ 
+  pavumeter is free software; you can redistribute it and/or modify
+  it under the terms of the GNU Lesser General Public License as published
+  by the Free Software Foundation; either version 2 of the License,
+  or (at your option) any later version.
+ 
+  pavumeter is distributed in the hope that it will be useful, but
+  WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+  General Public License for more details.
+ 
+  You should have received a copy of the GNU Lesser General Public License
+  along with pavumeter; if not, write to the Free Software
+  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+  USA.
+***/
+
 #include <signal.h>
 
 #include <gtkmm.h>
-#include <polyp/polyplib-context.h>
-#include <polyp/polyplib-stream.h>
-#include <polyp/polyplib-error.h>
-#include <polyp/polyplib-introspect.h>
+#include <polyp/polypaudio.h>
 #include <polyp/glib-mainloop.h>
 
 #define LOGARITHMIC 1
 
+
 class MainWindow : public Gtk::Window {
 
 public:
-    MainWindow(unsigned chan, const char *source_name);
+    MainWindow(const pa_channel_map &map, const char *source_name);
     virtual ~MainWindow();
     
 protected:
@@ -64,15 +81,14 @@ public:
     virtual void updateLatency(pa_usec_t l);
 };
 
-MainWindow::MainWindow(unsigned nchan, const char *source_name) :
+MainWindow::MainWindow(const pa_channel_map &map, const char *source_name) :
     Gtk::Window(),
     table(1, 2),
     latency(0) {
 
     char t[256];
+    int n;
 
-    g_assert(nchan > 0);
-    
     set_title("Volume Meter");
 
     add(vbox);
@@ -101,20 +117,12 @@ MainWindow::MainWindow(unsigned nchan, const char *source_name) :
     table.set_col_spacings(12);
     vbox.pack_start(table, true, true);
 
-    if (nchan == 2) {
-        addChannel("<b>Left:</b>");
-        addChannel("<b>Right:</b>");
-    } else if (nchan == 1)
-        addChannel("<b>Level:</b>");
-    else {
-        for (unsigned i = 1; i <= nchan; i++) {
-            char t[40];
-            snprintf(t, sizeof(t), "<b>Channel #%u:</b>", i);
-            addChannel(t);
-        }
+    for (n = 0; n < map.channels; n++) {
+        snprintf(t, sizeof(t), "<b>%s:</b>", pa_channel_position_to_string(map.map[n]));
+        addChannel(t);
     }
 
-    g_assert(channels.size() == nchan);
+    g_assert(channels.size() == map.channels);
 
     levels = NULL;
     display_timeout_signal_connection = Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::on_display_timeout), 10);
@@ -149,6 +157,9 @@ bool MainWindow::on_delete_event(GdkEventAny*) {
 }
 
 void MainWindow::addChannel(const Glib::ustring &l) {
+
+
+
     channels.push_back(new ChannelInfo(*this, l));
 }
 
@@ -303,13 +314,14 @@ static MainWindow *mainWindow = NULL;
 static struct pa_context *context = NULL;
 static struct pa_stream *stream = NULL;
 static struct pa_sample_spec sample_spec = { (enum pa_sample_format) 0, 0, 0 };    
+static struct pa_channel_map channel_map;
 static char* source_name = NULL;
 
-static void stream_get_latency_info_callback(struct pa_stream *s, const struct pa_latency_info *l, void *) {
+static void stream_update_timing_info_callback(struct pa_stream *s, int success, void *) {
     pa_usec_t t;
     int negative = 0;
     
-    if (!l) {
+    if (!success || pa_stream_get_latency(s, &t, &negative) < 0) {
         g_message("Failed to get latency information: %s", pa_strerror(pa_context_errno(context)));
         Gtk::Main::quit();
         return;
@@ -318,37 +330,49 @@ static void stream_get_latency_info_callback(struct pa_stream *s, const struct p
     if (!mainWindow)
         return;
 
-    t = pa_stream_get_latency(s, l, &negative);
-
     mainWindow->updateLatency(negative ? 0 : t);
 }
 
 static gboolean latency_func(gpointer) {
+    pa_operation *o;
+    
     if (!stream)
         return false;
 
-    pa_operation_unref(pa_stream_get_latency_info(stream, stream_get_latency_info_callback, NULL));
+    if (!(o = pa_stream_update_timing_info(stream, stream_update_timing_info_callback, NULL)))
+        g_message("pa_stream_update_timing_info() failed: %s", pa_strerror(pa_context_errno(context)));
+    else
+        pa_operation_unref(o);
+    
     return true;
 }
 
-static void stream_read_callback(struct pa_stream *, const void *p, size_t l, void *) {
+static void stream_read_callback(struct pa_stream *s, size_t l, void *) {
+    const void *p;
     g_assert(mainWindow);
 
+    if (pa_stream_peek(s, &p, &l) < 0) {
+        g_message("pa_stream_peek() failed: %s", pa_strerror(pa_context_errno(context)));
+        return;
+    }
+    
     mainWindow->pushData((const float*) p, l/sizeof(float));
+
+    pa_stream_drop(s);
 }
 
 static void stream_state_callback(struct pa_stream *s, void *) {
     switch (pa_stream_get_state(s)) {
-        case PA_STREAM_DISCONNECTED:
+        case PA_STREAM_UNCONNECTED:
         case PA_STREAM_CREATING:
             break;
 
         case PA_STREAM_READY:
             g_assert(!mainWindow);
-            mainWindow = new MainWindow(sample_spec.channels, source_name);
+            mainWindow = new MainWindow(channel_map, source_name);
 
             g_timeout_add(100, latency_func, NULL);
-            pa_operation_unref(pa_stream_get_latency_info(stream, stream_get_latency_info_callback, NULL));
+            pa_operation_unref(pa_stream_update_timing_info(stream, stream_update_timing_info_callback, NULL));
             break;
             
         case PA_STREAM_FAILED:
@@ -375,10 +399,12 @@ static void context_get_source_info_callback(struct pa_context *c, const struct 
     sample_spec.rate = si->sample_spec.rate;
     sample_spec.channels = si->sample_spec.channels;
 
-    pa_sample_spec_snprint(t, sizeof(t), &sample_spec);
-    g_message("Using sample format: %s", t);
+    channel_map = si->channel_map;
+    
+    g_message("Using sample format: %s", pa_sample_spec_snprint(t, sizeof(t), &sample_spec));
+    g_message("Using channel map: %s", pa_channel_map_snprint(t, sizeof(t), &channel_map));
 
-    stream = pa_stream_new(c, "vumeter", &sample_spec);
+    stream = pa_stream_new(c, "vumeter", &sample_spec, &channel_map);
     pa_stream_set_state_callback(stream, stream_state_callback, NULL);
     pa_stream_set_read_callback(stream, stream_read_callback, NULL);
     pa_stream_connect_record(stream, source_name, NULL, (enum pa_stream_flags) 0);
@@ -452,7 +478,7 @@ int main(int argc, char *argv[]) {
     g_assert(m);
 
     pa_context_set_state_callback(context, context_state_callback, NULL);
-    pa_context_connect(context, NULL, 1, NULL);
+    pa_context_connect(context, NULL, PA_CONTEXT_NOAUTOSPAWN, NULL);
 
     Gtk::Main::run();
 
