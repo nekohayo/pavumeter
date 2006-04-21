@@ -10,13 +10,13 @@
 <body>
 <h1><a name="top">Polypaudio Volume Meter @PACKAGE_VERSION@</a></h1>
 
-<p><i>Copyright 2004 Lennart Poettering &lt;@PACKAGE_BUGREPORT@&gt;</i></p>
+<p><i>Copyright 2004-2006 Lennart Poettering &lt;@PACKAGE_BUGREPORT@&gt;</i></p>
 
 <ul class="toc">
     <li><a href="#license">License</a></li>
     <li><a href="#news">News</a></li>
     <li><a href="#overview">Overview</a></li>
-    <li><a href="#status">Status</a></li>
+    <li><a href="#status">Current Status</a></li>
     <li><a href="#documentation">Documentation</a></li>
     <li><a href="#requirements">Requirements</a></li>
     <li><a href="#installation">Installation</a></li>
@@ -42,6 +42,9 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.</p>
 
 <h2><a name="news">News</a></h2>
 
+<div class="news-date">Fri Apr 21 2006: </div> <p class="news-text"><a
+href="@PACKAGE_URL@pavumeter-0.8.tar.gz">Version 0.8</a> released; compatibility with polypaudio 0.8</p>
+
 <div class="news-date">Sun Nov 21 2004: </div> <p class="news-text"><a
 href="@PACKAGE_URL@pavumeter-0.4.tar.gz">Version 0.3</a> released; compatibility with polypaudio 0.7; decaying of signal levels</p>
 
@@ -57,19 +60,19 @@ href="@PACKAGE_URL@pavumeter-0.1.tar.gz">Version 0.1</a> released</p>
 <h2><a name="overview">Overview</a></h2>
 
 <p>Polypaudio Volume Meter (<tt>pavumeter</tt>) is a simple GTK volume meter for the <a
-href="http://0pointer.de/lennart/projects/polypaudio/">polypaudio</a>
+href="http://0pointer.de/lennart/projects/polypaudio/">Polypaudio</a>
 sound server.</p>
 
 <p>Everybody loves <a href="@PACKAGE_URL@/screenshot.png">screenshots</a>.</p>
 
-<h2><a name="status">Status</a></h2>
+<h2><a name="status">Current Status</a></h2>
 
-<p>Everythings fine.</p>
+<p>Works perfectly.</p>
   
 <h2><a name="documentation">Documentation</a></h2>
 
 <p>There is not much to say. Just run <tt>pavumeter</tt> and see
-yourself. You may specficy the source to monitor on the command
+yourself. You may specify the source to monitor on the command
 line. If ommited the daemon's default source is selected.</p>
 
 <h2><a name="requirements">Requirements</a></h2>
@@ -83,7 +86,7 @@ source code configuration.</p>
 
 <p><tt>pavumeter</tt> requires <a href="http://gtkmm.sf.net/"><tt>gtkmm</tt></a> installed.</p>
 
-<p>Obviously <tt>pavumeter</tt> requires an installation of <tt>polypaudio</tt> (version 0.7).</p>
+<p>Obviously <tt>pavumeter</tt> requires an installation of <tt>polypaudio</tt> (version 0.8).</p>
  
 <h2><a name="installation">Installation</a></h2>
 
@@ -103,14 +106,14 @@ compilation and <tt>make install</tt> (as root) for installation of
 
 <p>The current release is <a href="@PACKAGE_URL@pavumeter-@PACKAGE_VERSION@.tar.gz">@PACKAGE_VERSION@</a></p>
 
-<p>Get <tt>pavumeter</tt>'s development sources from the <a href="http://subversion.tigris.org/">Subversion</a> <a href="svn://seth.intheinter.net/pavumeter">repository</a> (<a href="http://0pointer.de/cgi-bin/viewcvs.cgi/?root=pavumeter">viewcvs</a>): </p>
+<p>Get <tt>pavumeter</tt>'s development sources from the <a href="http://subversion.tigris.org/">Subversion</a> <a href="svn://svn.0pointer.net/pavumeter">repository</a> (<a href="http://0pointer.net/cgi-bin/viewcvs.cgi/?root=pavumeter">viewcvs</a>): </p>
 
-<pre>svn checkout svn://seth.intheinter.net/pavumeter/trunk pavumeter</pre>
+<pre>svn checkout svn://svn.0pointer.net/pavumeter/trunk pavumeter</pre>
 
 <p>If you want to be notified whenever I release a new version of this software use the subscription feature of <a href="http://freshmeat.net/projects/pavumeter/">Freshmeat</a>.</p>
 
 <hr/>
-<address class="grey">Lennart Poettering &lt;@PACKAGE_BUGREPORT@&gt;, November 2004</address>
+<address class="grey">Lennart Poettering &lt;@PACKAGE_BUGREPORT@&gt;, April 2006</address>
 <div class="grey"><i>$Id$</i></div>
 
 </body>
