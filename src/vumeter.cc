@@ -76,7 +76,7 @@ protected:
     std::deque<LevelInfo *> levelQueue;
 
 public:
-    virtual void pushData(const float *d, size_t l);
+    virtual void pushData(const float *d, unsigned l);
     virtual void showLevels(const LevelInfo& i);
     virtual void updateLatency(pa_usec_t l);
 };
@@ -157,9 +157,6 @@ bool MainWindow::on_delete_event(GdkEventAny*) {
 }
 
 void MainWindow::addChannel(const Glib::ustring &l) {
-
-
-
     channels.push_back(new ChannelInfo(*this, l));
 }
 
