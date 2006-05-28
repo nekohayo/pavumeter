@@ -22,11 +22,12 @@
 #include <signal.h>
 
 #include <gtkmm.h>
+#include <gtk/gtk.h>
+
 #include <polyp/polypaudio.h>
 #include <polyp/glib-mainloop.h>
 
 #define LOGARITHMIC 1
-
 
 class MainWindow : public Gtk::Window {
 
@@ -44,8 +45,10 @@ protected:
     };
 
     Gtk::VBox vbox, titleVBox;
+    Gtk::HBox titleHBox;
     Gtk::Table table;
     std::vector<ChannelInfo*> channels;
+    Gtk::Image image;
     Gtk::Label titleLabel;
     Gtk::Label subtitleLabel;
     Gtk::HSeparator separator;
@@ -89,7 +92,9 @@ MainWindow::MainWindow(const pa_channel_map &map, const char *source_name) :
     char t[256];
     int n;
 
-    set_title("Volume Meter");
+    set_title("Polypaudio Volume Meter");
+
+    gtk_window_set_icon_name(GTK_WINDOW(gobj()), "audio-input-microphone");
 
     add(vbox);
 
@@ -98,17 +103,23 @@ MainWindow::MainWindow(const pa_channel_map &map, const char *source_name) :
 
     vbox.pack_start(eventBox, false, false);
 
-    eventBox.add(titleVBox);
+    image.set_from_icon_name("audio-input-microphone", Gtk::ICON_SIZE_DIALOG);
+    
+    eventBox.add(titleHBox);
+    titleHBox.pack_start(image, false, false);
+    titleHBox.pack_end(titleVBox, true, true);
+    titleHBox.set_border_width(12);
+    titleHBox.set_spacing(12);
+
     titleVBox.add(titleLabel);
     titleVBox.add(subtitleLabel);
-    titleVBox.set_border_width(12);
     titleVBox.set_spacing(6);
 
     titleLabel.set_markup("<span size=\"18000\" color=\"black\"><b>Polypaudio Volume Meter</b></span>");
-    titleLabel.set_alignment(0);
+    titleLabel.set_alignment(0, 1);
     snprintf(t, sizeof(t), "Showing signal levels of source <b>%s</b>.", source_name);
     subtitleLabel.set_markup(t);
-    subtitleLabel.set_alignment(0);
+    subtitleLabel.set_alignment(0, 0);
     
     vbox.pack_start(separator, false, false);
 
