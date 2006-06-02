@@ -325,12 +325,13 @@ static struct pa_sample_spec sample_spec = { (enum pa_sample_format) 0, 0, 0 };
 static struct pa_channel_map channel_map;
 static char* source_name = NULL;
 
-void show_error(const char *txt) {
+void show_error(const char *txt, bool show_pa_error = true) {
     char buf[256];
 
-    snprintf(buf, sizeof(buf), "%s: %s", txt, pa_strerror(pa_context_errno(context)));
+    if (show_pa_error)
+        snprintf(buf, sizeof(buf), "%s: %s", txt, pa_strerror(pa_context_errno(context)));
     
-    Gtk::MessageDialog dialog(buf, false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_CLOSE, true);
+    Gtk::MessageDialog dialog(show_pa_error ? buf : txt, false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_CLOSE, true);
     dialog.run();
 
     Gtk::Main::quit();
@@ -435,7 +436,7 @@ static void context_get_server_info_callback(struct pa_context *c, const struct 
     }
 
     if (!*si->default_source_name) {
-        show_error("No default source set.");
+        show_error("No default source set.", false);
         return;
     }    
     
