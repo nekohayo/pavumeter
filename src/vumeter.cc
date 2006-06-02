@@ -325,13 +325,23 @@ static struct pa_sample_spec sample_spec = { (enum pa_sample_format) 0, 0, 0 };
 static struct pa_channel_map channel_map;
 static char* source_name = NULL;
 
+void show_error(const char *txt) {
+    char buf[256];
+
+    snprintf(buf, sizeof(buf), "%s: %s", txt, pa_strerror(pa_context_errno(context)));
+    
+    Gtk::MessageDialog dialog(buf, false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_CLOSE, true);
+    dialog.run();
+
+    Gtk::Main::quit();
+}
+
 static void stream_update_timing_info_callback(struct pa_stream *s, int success, void *) {
     pa_usec_t t;
     int negative = 0;
     
     if (!success || pa_stream_get_latency(s, &t, &negative) < 0) {
-        g_message("Failed to get latency information: %s", pa_strerror(pa_context_errno(context)));
-        Gtk::Main::quit();
+        show_error("Failed to get latency information");
         return;
     }
 
@@ -384,7 +394,8 @@ static void stream_state_callback(struct pa_stream *s, void *) {
             break;
             
         case PA_STREAM_FAILED:
-            g_message("Connection failed: %s", pa_strerror(pa_context_errno(context)));
+            show_error("Connection failed");
+            break;
             
         case PA_STREAM_TERMINATED:
             Gtk::Main::quit();
@@ -395,8 +406,7 @@ static void context_get_source_info_callback(struct pa_context *c, const struct 
     char t[256];
 
     if (is_last < 0) {
-        g_message("Failed to get source information: %s", pa_strerror(pa_context_errno(context)));
-        Gtk::Main::quit();
+        show_error("Failed to get source information");
         return;
     }
 
@@ -420,14 +430,12 @@ static void context_get_source_info_callback(struct pa_context *c, const struct 
 
 static void context_get_server_info_callback(struct pa_context *c, const struct pa_server_info*si, void *) {
     if (!si) {
-        g_message("Failed to get server information: %s", pa_strerror(pa_context_errno(context)));
-        Gtk::Main::quit();
+        show_error("Failed to get server information");
         return;
     }
 
     if (!*si->default_source_name) {
-        g_message("No default source set.");
-        Gtk::Main::quit();
+        show_error("No default source set.");
         return;
     }    
     
@@ -454,7 +462,8 @@ static void context_state_callback(struct pa_context *c, void *) {
             break;
             
         case PA_CONTEXT_FAILED:
-            g_message("Connection failed: %s", pa_strerror(pa_context_errno(context)));
+            show_error("Connection failed");
+            break;
             
         case PA_CONTEXT_TERMINATED:
             Gtk::Main::quit();
