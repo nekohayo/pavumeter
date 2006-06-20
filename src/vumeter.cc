@@ -24,8 +24,8 @@
 #include <gtkmm.h>
 #include <gtk/gtk.h>
 
-#include <polyp/polypaudio.h>
-#include <polyp/glib-mainloop.h>
+#include <pulse/pulseaudio.h>
+#include <pulse/glib-mainloop.h>
 
 #define LOGARITHMIC 1
 
@@ -92,7 +92,7 @@ MainWindow::MainWindow(const pa_channel_map &map, const char *source_name) :
     char t[256];
     int n;
 
-    set_title("Polypaudio Volume Meter");
+    set_title("PulseAudio Volume Meter");
 
     gtk_window_set_icon_name(GTK_WINDOW(gobj()), "audio-input-microphone");
 
@@ -115,7 +115,7 @@ MainWindow::MainWindow(const pa_channel_map &map, const char *source_name) :
     titleVBox.add(subtitleLabel);
     titleVBox.set_spacing(6);
 
-    titleLabel.set_markup("<span size=\"18000\" color=\"black\"><b>Polypaudio Volume Meter</b></span>");
+    titleLabel.set_markup("<span size=\"18000\" color=\"black\"><b>PulseAudio Volume Meter</b></span>");
     titleLabel.set_alignment(0, 1);
     snprintf(t, sizeof(t), "Showing signal levels of source <b>%s</b>.", source_name);
     subtitleLabel.set_markup(t);
@@ -319,11 +319,14 @@ bool MainWindow::LevelInfo::elapsed() {
 }
 
 static MainWindow *mainWindow = NULL;
-static struct pa_context *context = NULL;
-static struct pa_stream *stream = NULL;
-static struct pa_sample_spec sample_spec = { (enum pa_sample_format) 0, 0, 0 };    
-static struct pa_channel_map channel_map;
-static char* source_name = NULL;
+static pa_context *context = NULL;
+static pa_stream *stream = NULL;
+static char* device_name = NULL;
+static enum {
+    PLAYBACK,
+    RECORD
+} mode = PLAYBACK;
+
 
 void show_error(const char *txt, bool show_pa_error = true) {
     char buf[256];
@@ -337,7 +340,7 @@ void show_error(const char *txt, bool show_pa_error = true) {
     Gtk::Main::quit();
 }
 
-static void stream_update_timing_info_callback(struct pa_stream *s, int success, void *) {
+static void stream_update_timing_info_callback(pa_stream *s, int success, void *) {
     pa_usec_t t;
     int negative = 0;
     
@@ -366,7 +369,7 @@ static gboolean latency_func(gpointer) {
     return true;
 }
 
-static void stream_read_callback(struct pa_stream *s, size_t l, void *) {
+static void stream_read_callback(pa_stream *s, size_t l, void *) {
     const void *p;
     g_assert(mainWindow);
 
@@ -380,7 +383,7 @@ static void stream_read_callback(struct pa_stream *s, size_t l, void *) {
     pa_stream_drop(s);
 }
 
-static void stream_state_callback(struct pa_stream *s, void *) {
+static void stream_state_callback(pa_stream *s, void *) {
     switch (pa_stream_get_state(s)) {
         case PA_STREAM_UNCONNECTED:
         case PA_STREAM_CREATING:
@@ -388,7 +391,7 @@ static void stream_state_callback(struct pa_stream *s, void *) {
 
         case PA_STREAM_READY:
             g_assert(!mainWindow);
-            mainWindow = new MainWindow(channel_map, source_name);
+            mainWindow = new MainWindow(*pa_stream_get_channel_map(s), device_name);
 
             g_timeout_add(100, latency_func, NULL);
             pa_operation_unref(pa_stream_update_timing_info(stream, stream_update_timing_info_callback, NULL));
@@ -403,9 +406,27 @@ static void stream_state_callback(struct pa_stream *s, void *) {
     }
 }
 
-static void context_get_source_info_callback(struct pa_context *c, const struct pa_source_info *si, int is_last, void *) {
+static void create_stream(const char *name, const pa_sample_spec &ss, const pa_channel_map &cmap) {
     char t[256];
+    pa_sample_spec nss;
 
+    g_free(device_name);
+    device_name = g_strdup(name);
+    
+    nss.format = PA_SAMPLE_FLOAT32;
+    nss.rate = ss.rate;
+    nss.channels = ss.channels;
+    
+    g_message("Using sample format: %s", pa_sample_spec_snprint(t, sizeof(t), &nss));
+    g_message("Using channel map: %s", pa_channel_map_snprint(t, sizeof(t), &cmap));
+
+    stream = pa_stream_new(context, "PulseAudio Volume Meter", &nss, &cmap);
+    pa_stream_set_state_callback(stream, stream_state_callback, NULL);
+    pa_stream_set_read_callback(stream, stream_read_callback, NULL);
+    pa_stream_connect_record(stream, name, NULL, (enum pa_stream_flags) 0);
+}
+
+static void context_get_source_info_callback(pa_context *, const pa_source_info *si, int is_last, void *) {
     if (is_last < 0) {
         show_error("Failed to get source information");
         return;
@@ -414,37 +435,48 @@ static void context_get_source_info_callback(struct pa_context *c, const struct 
     if (!si)
         return;
 
-    sample_spec.format = PA_SAMPLE_FLOAT32;
-    sample_spec.rate = si->sample_spec.rate;
-    sample_spec.channels = si->sample_spec.channels;
-
-    channel_map = si->channel_map;
-    
-    g_message("Using sample format: %s", pa_sample_spec_snprint(t, sizeof(t), &sample_spec));
-    g_message("Using channel map: %s", pa_channel_map_snprint(t, sizeof(t), &channel_map));
-
-    stream = pa_stream_new(c, "vumeter", &sample_spec, &channel_map);
-    pa_stream_set_state_callback(stream, stream_state_callback, NULL);
-    pa_stream_set_read_callback(stream, stream_read_callback, NULL);
-    pa_stream_connect_record(stream, source_name, NULL, (enum pa_stream_flags) 0);
+    create_stream(si->name, si->sample_spec, si->channel_map);
 }
 
-static void context_get_server_info_callback(struct pa_context *c, const struct pa_server_info*si, void *) {
+static void context_get_sink_info_callback(pa_context *, const pa_sink_info *si, int is_last, void *) {
+    if (is_last < 0) {
+        show_error("Failed to get sink information");
+        return;
+    }
+
+    if (!si)
+        return;
+
+    create_stream(si->monitor_source_name, si->sample_spec, si->channel_map);
+}
+
+static void context_get_server_info_callback(pa_context *c, const pa_server_info*si, void *) {
     if (!si) {
         show_error("Failed to get server information");
         return;
     }
 
-    if (!*si->default_source_name) {
-        show_error("No default source set.", false);
-        return;
-    }    
-    
-    source_name = g_strdup(si->default_source_name);
-    pa_operation_unref(pa_context_get_source_info_by_name(c, source_name, context_get_source_info_callback, NULL));
+    if (mode == PLAYBACK) {
+
+        if (!si->default_sink_name) {
+            show_error("No default sink set.", false);
+            return;
+        }
+
+        pa_operation_unref(pa_context_get_sink_info_by_name(c, si->default_sink_name, context_get_sink_info_callback, NULL));
+        
+    } else if (mode == RECORD) {
+
+        if (!si->default_source_name) {
+            show_error("No default source set.", false);
+            return;
+        }
+
+        pa_operation_unref(pa_context_get_source_info_by_name(c, si->default_source_name, context_get_source_info_callback, NULL));
+    }
 }
 
-static void context_state_callback(struct pa_context *c, void *) {
+static void context_state_callback(pa_context *c, void *) {
     switch (pa_context_get_state(c)) {
         case PA_CONTEXT_UNCONNECTED:
         case PA_CONTEXT_CONNECTING:
@@ -455,8 +487,10 @@ static void context_state_callback(struct pa_context *c, void *) {
         case PA_CONTEXT_READY:
             g_assert(!stream);
 
-            if (source_name)
-                pa_operation_unref(pa_context_get_source_info_by_name(c, source_name, context_get_source_info_callback, NULL));
+            if (device_name && mode == RECORD)
+                pa_operation_unref(pa_context_get_source_info_by_name(c, device_name, context_get_source_info_callback, NULL));
+            else if (device_name && mode == PLAYBACK)
+                pa_operation_unref(pa_context_get_sink_info_by_name(c, device_name, context_get_sink_info_callback, NULL));
             else
                 pa_operation_unref(pa_context_get_server_info(c, context_get_server_info_callback, NULL));
             
@@ -472,28 +506,44 @@ static void context_state_callback(struct pa_context *c, void *) {
 }
 
 int main(int argc, char *argv[]) {
-    struct pa_glib_mainloop *m;
-
+    pa_glib_mainloop *m;
+    bool record;
+    
     signal(SIGPIPE, SIG_IGN);
 
-    Gtk::Main kit(argc, argv);
+    Glib::OptionGroup og("PulseAudio Volume Meter", "Control the volume of your PulseAudio Sound Server");
+    
+    Glib::OptionEntry oe;
+    oe.set_long_name("record");
+    oe.set_description("Show Record Levels");
+    og.add_entry(oe, record);
 
-    if (argc > 1)
-        source_name = g_strdup(argv[1]);
+    Glib::OptionContext oc;
+    oc.set_main_group(og);
+    
+    Gtk::Main kit(argc, argv, oc);
+
+    mode = record ? RECORD : PLAYBACK;
+
+    g_message("Starting in %s mode.", mode == RECORD ? "record" : "playback");
+
+    /* Rather ugly and incomplete */
+    if (argc > 1) 
+        device_name = g_strdup(argv[1]) ;
     else {
-        char *e = getenv("POLYP_SOURCE");
-        if (e)
-            source_name = g_strdup(e);
+        char *e;
+        if ((e = getenv(mode == RECORD ? "PULSE_SOURCE" : "PULSE_SINK")))
+            device_name = g_strdup(e);
     }
 
-    if (source_name)
-        g_message("Using source '%s'", source_name);
+    if (device_name)
+        g_message("Using device '%s'", device_name);
 
     m = pa_glib_mainloop_new(g_main_context_default());
     g_assert(m);
 
-    context = pa_context_new(pa_glib_mainloop_get_api(m), "vumeter");
-    g_assert(m);
+    context = pa_context_new(pa_glib_mainloop_get_api(m), "PulseAudio Volume Meter");
+    g_assert(context);
 
     pa_context_set_state_callback(context, context_state_callback, NULL);
     pa_context_connect(context, NULL, PA_CONTEXT_NOAUTOSPAWN, NULL);
@@ -508,8 +558,8 @@ int main(int argc, char *argv[]) {
     if (mainWindow)
         delete mainWindow;
 
-    if(source_name)
-        g_free(source_name);
+    if(device_name)
+        g_free(device_name);
     
     pa_glib_mainloop_free(m);
     

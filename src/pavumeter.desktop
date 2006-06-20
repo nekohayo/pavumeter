@@ -1,6 +1,6 @@
 [Desktop Entry]
 Encoding=UTF-8
-Name=Polypaudio Volume Meter
+Name=PulseAudio Volume Meter
 GenericName=Volume Meter
 Comment=Monitor the output or input volume
 Exec=pavumeter
