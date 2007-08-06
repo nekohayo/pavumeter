@@ -511,61 +511,66 @@ static void context_state_callback(pa_context *c, void *) {
 
 int main(int argc, char *argv[]) {
     pa_glib_mainloop *m;
-    bool record;
+    bool record = false;
     
     signal(SIGPIPE, SIG_IGN);
 
-    Glib::OptionGroup og("PulseAudio Volume Meter", "Control the volume of your PulseAudio Sound Server");
-    
-    Glib::OptionEntry oe;
-    oe.set_long_name("record");
-    oe.set_description("Show Record Levels");
-    og.add_entry(oe, record);
+    try {
+        Glib::OptionGroup og("PulseAudio Volume Meter", "Control the volume of your PulseAudio Sound Server");
+        
+        Glib::OptionEntry oe;
+        oe.set_long_name("record");
+        oe.set_description("Show Record Levels");
+        og.add_entry(oe, record);
+            
+        Glib::OptionContext oc;
+        oc.set_main_group(og);
+            
+        Gtk::Main kit(argc, argv, oc);
+            
+        mode = record ? RECORD : PLAYBACK;
+            
+        g_message("Starting in %s mode.", mode == RECORD ? "record" : "playback");
+            
+        /* Rather ugly and incomplete */
+        if (argc > 1) 
+            device_name = g_strdup(argv[1]) ;
+        else {
+            char *e;
+            if ((e = getenv(mode == RECORD ? "PULSE_SOURCE" : "PULSE_SINK")))
+                device_name = g_strdup(e);
+        }
+            
+        if (device_name)
+            g_message("Using device '%s'", device_name);
+            
+        m = pa_glib_mainloop_new(g_main_context_default());
+        g_assert(m);
+            
+        context = pa_context_new(pa_glib_mainloop_get_api(m), "PulseAudio Volume Meter");
+        g_assert(context);
+            
+        pa_context_set_state_callback(context, context_state_callback, NULL);
+        pa_context_connect(context, NULL, PA_CONTEXT_NOAUTOSPAWN, NULL);
+            
+        Gtk::Main::run();
+            
+        if (stream)
+            pa_stream_unref(stream);
+        if (context)
+            pa_context_unref(context);
+            
+        if (mainWindow)
+            delete mainWindow;
+            
+        if(device_name)
+            g_free(device_name);
+            
+        pa_glib_mainloop_free(m);
 
-    Glib::OptionContext oc;
-    oc.set_main_group(og);
-    
-    Gtk::Main kit(argc, argv, oc);
-
-    mode = record ? RECORD : PLAYBACK;
-
-    g_message("Starting in %s mode.", mode == RECORD ? "record" : "playback");
-
-    /* Rather ugly and incomplete */
-    if (argc > 1) 
-        device_name = g_strdup(argv[1]) ;
-    else {
-        char *e;
-        if ((e = getenv(mode == RECORD ? "PULSE_SOURCE" : "PULSE_SINK")))
-            device_name = g_strdup(e);
+    } catch (Glib::OptionError) {
+        g_message("Bad parameter");
     }
-
-    if (device_name)
-        g_message("Using device '%s'", device_name);
-
-    m = pa_glib_mainloop_new(g_main_context_default());
-    g_assert(m);
-
-    context = pa_context_new(pa_glib_mainloop_get_api(m), "PulseAudio Volume Meter");
-    g_assert(context);
-
-    pa_context_set_state_callback(context, context_state_callback, NULL);
-    pa_context_connect(context, NULL, PA_CONTEXT_NOAUTOSPAWN, NULL);
-
-    Gtk::Main::run();
-
-    if (stream)
-        pa_stream_unref(stream);
-    if (context)
-        pa_context_unref(context);
-
-    if (mainWindow)
-        delete mainWindow;
-
-    if(device_name)
-        g_free(device_name);
-    
-    pa_glib_mainloop_free(m);
     
     return 0;
 }
