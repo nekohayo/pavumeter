@@ -121,7 +121,7 @@ MainWindow::MainWindow(const pa_channel_map &map, const char *source_name) :
 
     titleLabel.set_markup("<span size=\"18000\" color=\"black\"><b>PulseAudio Volume Meter</b></span>");
     titleLabel.set_alignment(0, 1);
-    snprintf(t, sizeof(t), "Showing signal levels of source <b>%s</b>.", source_name);
+    snprintf(t, sizeof(t), "<span color=\"black\">Showing signal levels of source <b>%s</b>.</span>", source_name);
     subtitleLabel.set_markup(t);
     subtitleLabel.set_alignment(0, 0);
     
