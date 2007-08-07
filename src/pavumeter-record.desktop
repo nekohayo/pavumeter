@@ -1,9 +1,9 @@
 [Desktop Entry]
 Encoding=UTF-8
-Name=PulseAudio Volume Meter (Playback)
-GenericName=Playback Volume Meter
-Comment=Monitor the output volume
-Exec=pavumeter
+Name=PulseAudio Volume Meter (Capture)
+GenericName=Capture Volume Meter
+Comment=Monitor the input volume
+Exec=pavumeter --record
 Icon=audio-input-microphone
 StartupNotify=true
 Type=Application

@@ -26,4 +26,4 @@ pavumeter_SOURCES=vumeter.cc
 pavumeter_LDADD=$(AM_LDADD) $(GUILIBS_LIBS) $(PULSE_LIBS)
 pavumeter_CXXFLAGS=$(AM_CXXFLAGS) $(GUILIBS_CFLAGS) $(PULSE_CFLAGS) 
 
-dist_desktop_DATA=pavumeter.desktop
+dist_desktop_DATA=pavumeter.desktop pavumeter-record.desktop
