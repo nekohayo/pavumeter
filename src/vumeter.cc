@@ -36,7 +36,7 @@
 class MainWindow : public Gtk::Window {
 
 public:
-    MainWindow(const pa_channel_map &map, const char *source_name);
+    MainWindow(const pa_channel_map &map, const char *source_name, const char *description);
     virtual ~MainWindow();
     
 protected:
@@ -88,7 +88,7 @@ public:
     virtual void updateLatency(pa_usec_t l);
 };
 
-MainWindow::MainWindow(const pa_channel_map &map, const char *source_name) :
+MainWindow::MainWindow(const pa_channel_map &map, const char *, const char *description) :
     Gtk::Window(),
     table(1, 2),
     latency(0) {
@@ -121,7 +121,7 @@ MainWindow::MainWindow(const pa_channel_map &map, const char *source_name) :
 
     titleLabel.set_markup("<span size=\"18000\" color=\"black\"><b>PulseAudio Volume Meter</b></span>");
     titleLabel.set_alignment(0, 1);
-    snprintf(t, sizeof(t), "<span color=\"black\">Showing signal levels of source <b>%s</b></span>", source_name);
+    snprintf(t, sizeof(t), "<span color=\"black\">Showing signal levels of <b>%s</b></span>", description);
     subtitleLabel.set_markup(t);
     subtitleLabel.set_alignment(0, 0);
     
@@ -133,15 +133,15 @@ MainWindow::MainWindow(const pa_channel_map &map, const char *source_name) :
     vbox.pack_start(table, true, true);
 
     for (n = 0; n < map.channels; n++) {
-        snprintf(t, sizeof(t), "<b>%s:</b>", pa_channel_position_to_string(map.map[n]));
+        snprintf(t, sizeof(t), "<b>%s</b>", pa_channel_position_to_pretty_string(map.map[n]));
         addChannel(t);
     }
 
     g_assert(channels.size() == map.channels);
 
     levels = NULL;
-    display_timeout_signal_connection = Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::on_display_timeout), 10);
-    calc_timeout_signal_connection = Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::on_calc_timeout), 50);
+    display_timeout_signal_connection = Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::on_display_timeout), 40);
+    calc_timeout_signal_connection = Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::on_calc_timeout), 100);
     
     show_all();
 }
@@ -326,6 +326,7 @@ static MainWindow *mainWindow = NULL;
 static pa_context *context = NULL;
 static pa_stream *stream = NULL;
 static char* device_name = NULL;
+static char* device_description = NULL;
 static enum {
     PLAYBACK,
     RECORD
@@ -395,7 +396,7 @@ static void stream_state_callback(pa_stream *s, void *) {
 
         case PA_STREAM_READY:
             g_assert(!mainWindow);
-            mainWindow = new MainWindow(*pa_stream_get_channel_map(s), device_name);
+            mainWindow = new MainWindow(*pa_stream_get_channel_map(s), device_name, device_description);
 
             g_timeout_add(100, latency_func, NULL);
             pa_operation_unref(pa_stream_update_timing_info(stream, stream_update_timing_info_callback, NULL));
@@ -410,12 +411,14 @@ static void stream_state_callback(pa_stream *s, void *) {
     }
 }
 
-static void create_stream(const char *name, const pa_sample_spec &ss, const pa_channel_map &cmap) {
+static void create_stream(const char *name, const char *description, const pa_sample_spec &ss, const pa_channel_map &cmap) {
     char t[256];
     pa_sample_spec nss;
 
     g_free(device_name);
     device_name = g_strdup(name);
+    g_free(device_description);
+    device_description = g_strdup(description);
     
     nss.format = PA_SAMPLE_FLOAT32;
     nss.rate = ss.rate;
@@ -439,7 +442,7 @@ static void context_get_source_info_callback(pa_context *, const pa_source_info 
     if (!si)
         return;
 
-    create_stream(si->name, si->sample_spec, si->channel_map);
+    create_stream(si->name, si->description, si->sample_spec, si->channel_map);
 }
 
 static void context_get_sink_info_callback(pa_context *, const pa_sink_info *si, int is_last, void *) {
@@ -451,7 +454,7 @@ static void context_get_sink_info_callback(pa_context *, const pa_sink_info *si,
     if (!si)
         return;
 
-    create_stream(si->monitor_source_name, si->sample_spec, si->channel_map);
+    create_stream(si->monitor_source_name, si->description, si->sample_spec, si->channel_map);
 }
 
 static void context_get_server_info_callback(pa_context *c, const pa_server_info*si, void *) {
