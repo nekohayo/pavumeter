@@ -102,8 +102,6 @@ MainWindow::MainWindow(const pa_channel_map &map, const char *, const char *desc
 
     add(vbox);
 
-    Gdk::Color c("white");
-    eventBox.modify_bg(Gtk::STATE_NORMAL, c);
 
     vbox.pack_start(eventBox, false, false);
 
@@ -119,9 +117,9 @@ MainWindow::MainWindow(const pa_channel_map &map, const char *, const char *desc
     titleVBox.add(subtitleLabel);
     titleVBox.set_spacing(6);
 
-    titleLabel.set_markup("<span size=\"18000\" color=\"black\"><b>PulseAudio Volume Meter</b></span>");
+    titleLabel.set_markup("<span size=\"18000\"><b>PulseAudio Volume Meter</b></span>");
     titleLabel.set_alignment(0, 1);
-    snprintf(t, sizeof(t), "<span color=\"black\">Showing signal levels of <b>%s</b></span>", description);
+    snprintf(t, sizeof(t), "Showing signal levels of <b>%s</b>", description);
     subtitleLabel.set_markup(t);
     subtitleLabel.set_alignment(0, 0);
     
